@@ -6,7 +6,7 @@ from torch import nn
 
 from proj4_code.segmentation.resnet import resnet50
 from proj4_code.segmentation.ppm import PPM
-
+import math
 
 class PSPNet(nn.Module):
     """
@@ -64,11 +64,24 @@ class PSPNet(nn.Module):
         # Initialize your ResNet backbone, and set the layers                     
         # layer0, layer1, layer2, layer3, layer4. Note: layer0 should be sequential
         ############################################################################
-        raise NotImplementedError('PSPNet - resnet backbone not implemented')
+        backbone = resnet50(pretrained=pretrained, deep_base=deep_base)
+        self.layer0 = nn.Sequential(
+            nn.Conv2d(in_channels=3, out_channels=128, kernel_size=7, stride=2, padding=3, bias=False),
+            nn.BatchNorm2d(128),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+        )
+
+        # backbone.conv1, backbone.bn1, backbone.relu, backbone.maxpool
+        self.layer1 = backbone.layer1
+        self.layer2 = backbone.layer2
+        self.layer3 = backbone.layer3
+        self.layer4 = backbone.layer4
 
         ############################################################################
         # Student code end
         ############################################################################
+        
 
         self.__replace_conv_with_dilated_conv()
 
@@ -79,7 +92,8 @@ class PSPNet(nn.Module):
         # Afterwards, set fea_dim to the updated feature dimension to be passed   #
         # to the classifier
         ############################################################################
-        raise NotImplementedError('PSPNet - PPM not implemented')
+        self.ppm = PPM(in_dim=2048, reduction_dim=(2048 // len(bins)), bins=bins)
+        fea_dim = 2048 + len(bins) * (2048 // len(bins))
 
         ############################################################################
         # Student code end
@@ -103,9 +117,25 @@ class PSPNet(nn.Module):
         ############################################################################
         # Student code begin
         ############################################################################
+        for name, module in self.layer3.named_modules():
+            if isinstance(module, nn.Conv2d) and 'conv2' in name:
+                module.stride = (1, 1)
+                module.dilation = (2, 2)
+                module.padding = (2, 2)
 
-        raise NotImplementedError('`__replace_conv_with_dilated_conv()` function in ' +
-                '`pspnet.py` needs to be implemented')
+        for name, module in self.layer4.named_modules():
+            if isinstance(module, nn.Conv2d) and 'conv2' in name:
+                module.stride = (1, 1)
+                module.dilation = (4, 4)
+                module.padding = (4, 4)
+
+        for name, module in self.layer3.named_modules():
+            if 'downsample.0' in name:
+                module.stride = (1, 1)
+
+        for name, module in self.layer4.named_modules():
+            if 'downsample.0' in name:
+                module.stride = (1, 1)
         ############################################################################
         # Student code end
         ############################################################################
@@ -126,9 +156,13 @@ class PSPNet(nn.Module):
         ############################################################################
         # Student code begin
         ############################################################################
-
-        raise NotImplementedError('`__create_classifier()` function in ' +
-                '`pspnet.py` needs to be implemented')
+        return nn.Sequential(
+            nn.Conv2d(in_feats, out_feats, kernel_size=3, padding=1, bias=False),
+            nn.BatchNorm2d(out_feats),
+            nn.ReLU(inplace=True),
+            nn.Dropout2d(p=self.dropout),
+            nn.Conv2d(out_feats, num_classes, kernel_size=1)
+        )
 
         ############################################################################
         # Student code end
@@ -183,9 +217,43 @@ class PSPNet(nn.Module):
         ############################################################################
         # Student code begin
         ############################################################################
+        h, w = x_size[2], x_size[3]
 
-        raise NotImplementedError('`forward()` function in ' +
-                '`pspnet.py` needs to be implemented')
+        h = int(math.ceil(h / 8 * self.zoom_factor))
+        w = int(math.ceil(w / 8 * self.zoom_factor))
+        # print("initial", x.size())
+        x = self.layer0(x)
+        # print("0",x.size())
+        x = self.layer1(x)
+        # print("1",x.size())
+        x = self.layer2(x)
+        # print("2",x.size())
+        x = self.layer3(x)
+        # print("3",x.size())
+        
+        if self.training and self.use_ppm:
+            aux = self.aux(x)
+            aux = F.interpolate(aux, size=(h, w), mode='bilinear', align_corners=True)
+
+        x = self.layer4(x)
+        # print("4",x.size())
+        x = self.ppm(x)
+        # print("ppm",x.size())
+        x = self.cls(x)
+        # print("cls",x.size())
+        x = F.interpolate(x, size=(h, w), mode='bilinear', align_corners=True)
+        
+        logits = x
+        yhat = torch.argmax(logits, dim=1)
+
+        if y is not None and self.training:
+            main_loss = self.criterion(logits, y)
+            aux_loss = self.criterion(aux, y) if self.use_ppm else torch.tensor(0)
+            return logits, yhat, main_loss, aux_loss
+        else:
+            # During inference, return the logits and the predicted class labels (yhat).
+            # You can return None for the losses.
+            return logits, yhat, None, None
 
         ############################################################################
         # Student code end

@@ -11,15 +11,29 @@ class SimpleNetDropout(nn.Module):
         """
         super().__init__()
 
-        self.conv_layers = nn.Sequential()
-        self.fc_layers = nn.Sequential()
-        self.loss_criterion = None
-
+        self.conv_layers = nn.Sequential(
+            nn.Conv2d(in_channels=1, out_channels=10, kernel_size=5, stride=1, padding=0), #input 1x64x64 output 10x60x60
+            nn.MaxPool2d(kernel_size=3,stride=3,padding=0), #input 10x60x60 output 10x20x20
+            nn.ReLU(),
+            # nn.Dropout(0.5),
+            nn.Conv2d(in_channels=10, out_channels=20, kernel_size=5, stride=1, padding=0), #input  10x20x20 output 20x16x16
+            nn.MaxPool2d(kernel_size=4,stride=3,padding=0), # i 20x16x16 o 20x5x5
+            nn.ReLU(),
+            nn.Dropout(0.4),
+            nn.Flatten()
+        )  # conv2d and supporting layers here
+        self.fc_layers = nn.Sequential(
+            nn.Linear(500,100),
+            # nn.ReLU(),
+            # nn.Dropout(0.5),
+            nn.Linear(100,15)
+        )  # linear and supporting layers here
+        # self.loss_criterion = nn.MSELoss(reduction='sum')
+        # self.loss_criterion = nn.KLDivLoss()
+        self.loss_criterion = nn.CrossEntropyLoss()
         ############################################################################
         # Student code begin
         ############################################################################
-
-        raise NotImplementedError('SimpleNetDropout not implemented')
 
         ############################################################################
         # Student code end
@@ -42,7 +56,9 @@ class SimpleNetDropout(nn.Module):
         ############################################################################
         # Student code begin
         ############################################################################
-        raise NotImplementedError('SimpleNetDropout not implemented')
+        conv_features = self.conv_layers(x)
+        linear_model_input = conv_features
+        model_output = self.fc_layers(linear_model_input)
         ############################################################################
         # Student code end
         ############################################################################

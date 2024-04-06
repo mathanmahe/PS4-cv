@@ -6,6 +6,7 @@ from typing import Tuple
 
 import torchvision.transforms as transforms
 import numpy as np
+import torchvision.transforms.v2 as v2
 
 
 def get_fundamental_transforms(
@@ -61,14 +62,29 @@ def get_data_augmentation_transforms(
     """
 
     #comment out the raise error when you start writing code
-    raise NotImplementedError('get_data_augmentation_transforms not implemented')
+    # raise NotImplementedError('get_data_augmentation_transforms not implemented')
     
     return transforms.Compose(
         [
             ############################################################################
             # Student code begin
             ############################################################################
-            
+            v2.ColorJitter(
+                brightness=0.4,
+                saturation=0.4,
+                contrast=0.5,
+                hue=0.3,
+            ),
+            v2.RandomHorizontalFlip(p=0.5),
+            # v2.RandomVerticalFlip(p=0.2),
+            # v2.RandomResizedCrop(size=(inp_size), antialias=True),
+            # v2.RandomRotation((0,20)),
+            # v2.RandomAffine((20,30)),
+            # v2.RandomPerspective(distortion_scale=0.6, p=0.5),
+            transforms.Resize(inp_size),
+            transforms.Grayscale(1),
+            transforms.ToTensor(),
+            transforms.Normalize(pixel_mean, pixel_std)
             
 
             ############################################################################
